@@ -92,10 +92,121 @@ for (const element of functionElements) {
 }
 
 // Load the Zig bindings file.
-const bindings = await fs.readFile(
+let bindings = await fs.readFile(
 	path.join("../src/", "playdate_api_definitions.zig"),
+	{ encoding: "utf-8" },
 )
 
-// TODO: Could find the doc comments locations and add or update them?
+// Split to lines.
+const lines = bindings.split("\n")
 
-console.log(functions.slice(0, 3))
+// For each function, find the corresponding struct name and inject the description as a doc comment.
+for (const { name, description } of functions) {
+	// String like "Calls the log function, outputting an error in red to the console, then pauses execution.\n\nhttps://sdk.play.date/2.4.0/Inside%20Playdate%20with%20C.html#f-system.error"
+	// will be converted to:
+	// "/// Calls the log function, outputting an error in red to the console, then pauses execution.\n///\n/// [Playdate SDK Documentation](https://sdk.play.date/2.4.0/Inside%20Playdate%20with%20C.html#f-system.error)"
+	const linesToInject = description.split("\n").map((line) => `    /// ${line}`)
+
+	// If the name start with "json_", it is an inline function and we can use a simplified injection logic.
+	if (name.startsWith("json_")) {
+		// Find the line number of the function definition.
+		const functionLine = lines.findIndex((line) => line.includes(`inline fn ${name}(`))
+
+		// Inject the description as a doc comment on the above line.
+		lines.splice(functionLine, 0, ...linesToInject)
+		continue
+	}
+
+	// Find the struct name from the namespace.
+	const structName = nameToStructName(name)
+	let propertyName = name.split(".").pop()
+
+	// 'error' is a special name that should get mapped to '@"error"'
+	if (propertyName === "error") {
+		propertyName = '@"error"'
+	}
+
+	// Find the line number of the struct definition.
+	let startLine = lines.findIndex((line) => line.includes(` ${structName} =`))
+
+	// Warn if not found.
+	if (startLine === -1) {
+		console.warn(`Struct "${structName}" not found for function name "${name}"`)
+	} else {
+		// Find the next instace of '};' after the struct definition line.
+		const endLine = lines.findIndex((line, i) => i > startLine && line.includes('};'))
+
+		// Find the function definition line from between the struct definition and the next '};'.
+		const functionLine = lines.findIndex((line, i) => i > startLine && i < endLine && line.includes(`${propertyName}: `))
+
+		// Warn if not found.
+		if (functionLine === -1) {
+			console.warn(`"Property ${propertyName}" not found for struct "${structName}"`)
+		} else {
+			// Inject the description as a doc comment on the above line.
+			lines.splice(functionLine, 0, ...linesToInject)
+		}
+	}
+}
+
+// Create a new bindings file with the updated doc comments.
+await fs.writeFile(
+	path.join(".", "playdate_api_definitions_with_comments.zig"),
+	lines.join("\n"),
+)
+
+/**
+ * Lookup table to convert namespaces like "system" to struct names like "PlaydateSys" in the Zig bindings file.
+ */
+function nameToStructName(name: string) {
+	// If the name does not have a dot, just return it as-is.
+	if (!name.includes(".")) {
+		return name
+	}
+
+	// If the name has more than one dot, ignore al but the last two parts.
+	if (name.split(".").length > 2) {
+		name = name.split(".").slice(-2).join(".")
+	}
+
+	const namespace = name.split(".")[0]
+
+	const dictionary: Record<string, string> = {
+		system: "PlaydateSys",
+		sound: "PlaydateSound",
+		display: "PlaydateDisplay",
+		file: "PlaydateFile",
+		graphics: "PlaydateGraphics",
+		json: "PlaydateJSON",
+		lua: "PlaydateLua",
+		sprite: "PlaydateSprite",
+		video: "PlaydateVideo",
+		channel: "PlaydateSoundChannel",
+		lfo: "PlaydateSoundLFO",
+		source: "PlaydateSoundSource",
+		sample: "PlaydateSoundSample",
+		fileplayer: "PlaydateSoundFileplayer",
+		sampleplayer: "PlaydateSoundSampleplayer",
+		synth: "PlaydateSoundSynth",
+		instrument: "PlaydateSoundInstrument",
+		signal: "PlaydateSoundSignal",
+		envelope: "PlaydateSoundEnvelope",
+		effect: "PlaydateSoundEffect",
+		sequence: "PlaydateSoundSequence",
+		controlsignal: "PlaydateControlSignal",
+		track: "PlaydateSoundTrack",
+		twopolefilter: "PlaydateSoundEffectTwopolefilter",
+		onepolefilter: "PlaydateSoundEffectOnepolefilter",
+		bitcrusher: "PlaydateSoundEffectBitcrusher",
+		ringmodulator: "PlaydateSoundEffectRingmodulator",
+		overdrive: "PlaydateSoundEffectOverdrive",
+		delayline: "PlaydateSoundEffectDelayline",
+	}
+
+	const returnValue = dictionary[namespace]
+	if (!returnValue) {
+		throw new Error(`Unknown namespace in "${name}"`)
+	}
+
+	return returnValue
+}
