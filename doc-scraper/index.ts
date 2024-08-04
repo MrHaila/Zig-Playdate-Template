@@ -92,7 +92,7 @@ for (const element of functionElements) {
 }
 
 // Load the Zig bindings file.
-let bindings = await fs.readFile(
+const bindings = await fs.readFile(
 	path.join("../src/", "playdate_api_definitions.zig"),
 	{ encoding: "utf-8" },
 )
@@ -110,7 +110,9 @@ for (const { name, description } of functions) {
 	// If the name start with "json_", it is an inline function and we can use a simplified injection logic.
 	if (name.startsWith("json_")) {
 		// Find the line number of the function definition.
-		const functionLine = lines.findIndex((line) => line.includes(`inline fn ${name}(`))
+		const functionLine = lines.findIndex((line) =>
+			line.includes(`inline fn ${name}(`),
+		)
 
 		// Inject the description as a doc comment on the above line.
 		lines.splice(functionLine, 0, ...linesToInject)
@@ -127,21 +129,28 @@ for (const { name, description } of functions) {
 	}
 
 	// Find the line number of the struct definition.
-	let startLine = lines.findIndex((line) => line.includes(` ${structName} =`))
+	const startLine = lines.findIndex((line) => line.includes(` ${structName} =`))
 
 	// Warn if not found.
 	if (startLine === -1) {
 		console.warn(`Struct "${structName}" not found for function name "${name}"`)
 	} else {
 		// Find the next instace of '};' after the struct definition line.
-		const endLine = lines.findIndex((line, i) => i > startLine && line.includes('};'))
+		const endLine = lines.findIndex(
+			(line, i) => i > startLine && line.includes("};"),
+		)
 
 		// Find the function definition line from between the struct definition and the next '};'.
-		const functionLine = lines.findIndex((line, i) => i > startLine && i < endLine && line.includes(`${propertyName}: `))
+		const functionLine = lines.findIndex(
+			(line, i) =>
+				i > startLine && i < endLine && line.includes(`${propertyName}: `),
+		)
 
 		// Warn if not found.
 		if (functionLine === -1) {
-			console.warn(`"Property ${propertyName}" not found for struct "${structName}"`)
+			console.warn(
+				`"Property ${propertyName}" not found for struct "${structName}"`,
+			)
 		} else {
 			// Inject the description as a doc comment on the above line.
 			lines.splice(functionLine, 0, ...linesToInject)
@@ -164,12 +173,14 @@ function nameToStructName(name: string) {
 		return name
 	}
 
-	// If the name has more than one dot, ignore al but the last two parts.
-	if (name.split(".").length > 2) {
-		name = name.split(".").slice(-2).join(".")
-	}
+	let namespace: string
 
-	const namespace = name.split(".")[0]
+	// If the name has more than one dot, ignore all but the last two parts.
+	if (name.split(".").length > 2) {
+		namespace = name.split(".").slice(-2)[0]
+	} else {
+		namespace = name.split(".")[0]
+	}
 
 	const dictionary: Record<string, string> = {
 		system: "PlaydateSys",
