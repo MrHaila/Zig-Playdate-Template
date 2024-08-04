@@ -3,8 +3,10 @@ import path from "node:path"
 import { JSDOM } from "jsdom"
 
 /**
- * @fileoverview Scrape the HTML documentation of the Playdate C API and update the Zig doc comments in the bindings file.
+ * @fileoverview Scrape the HTML documentation of the Playdate C API and create a copy of the Zig bindings file with the documentation as doc comments.
  */
+
+// SDK VERSION --------------------------------------------------------------------------------------------------------
 
 // Error out if the Playdate SDK env var is not set.
 if (!process.env.PLAYDATE_SDK_PATH) {
@@ -26,7 +28,7 @@ const sdkVersion = (
 	await fs.readFile(path.join(playdateSDK, "VERSION.txt"), "utf-8")
 ).trim()
 
-// Check the latest SDK version by visiting the https://sdk.play.date/ page and reding the version from the redirected URL.
+// Check the latest SDK version by visiting the https://sdk.play.date/ page and reading the version from the redirected URL.
 // The URL is like https://sdk.play.date/2.4.0/ and the version is the last part of the URL.
 const latestSdkVersion = await fetch("https://sdk.play.date/").then((res) => {
 	const url = new URL(res.url)
@@ -39,6 +41,8 @@ if (sdkVersion !== latestSdkVersion) {
 		`The latest SDK version is ${latestSdkVersion} and you are using ${sdkVersion}. The generated types will be based on the ${sdkVersion} SDK.`,
 	)
 }
+
+// HTML PARSING -------------------------------------------------------------------------------------------------------
 
 /** 
  * Example HTML structure.
@@ -90,6 +94,8 @@ for (const element of functionElements) {
 	// Push the function name and description to the array.
 	functions.push({ name, description })
 }
+
+// ZIG BINDINGS -------------------------------------------------------------------------------------------------------
 
 // Load the Zig bindings file.
 const bindings = await fs.readFile(
@@ -158,11 +164,15 @@ for (const { name, description } of functions) {
 	}
 }
 
+// OUTPUT -------------------------------------------------------------------------------------------------------------
+
 // Create a new bindings file with the updated doc comments.
 await fs.writeFile(
-	path.join(".", "playdate_api_definitions_with_comments.zig"),
+	path.join("./output/", "playdate_api_definitions_with_comments.zig"),
 	lines.join("\n"),
 )
+
+// UTILS --------------------------------------------------------------------------------------------------------------
 
 /**
  * Lookup table to convert namespaces like "system" to struct names like "PlaydateSys" in the Zig bindings file.
